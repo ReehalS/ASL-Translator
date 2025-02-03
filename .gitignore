@@ -1,3 +1,8 @@
+**/.DS_Store
+.DS_Store
+Dataset/.DS_Store
+Dataset/Original/.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -170,5 +175,3 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
-**/.DS_Store
