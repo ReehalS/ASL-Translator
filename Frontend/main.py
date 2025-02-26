@@ -11,7 +11,7 @@ import pandas as pd  # Import pandas for feature name handling
 warnings.simplefilter(action="ignore", category=UserWarning)
 
 # Load the trained model
-model_path = "Dataset/Generated_Data/mlp_classifier_best_params.pkl"
+model_path = "Models/mlp_classifier_best_params.pkl"
 mlp_model = joblib.load(model_path)
 
 # Initialize MediaPipe Hands
