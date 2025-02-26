@@ -13,17 +13,13 @@ warnings.simplefilter(action="ignore", category=UserWarning)
 # Load the trained model
 model_path = "Models/mlp_classifier_best_params.pkl"
 mlp_model = joblib.load(model_path)
+class_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
+                'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'del', 'space']
 
-# Initialize MediaPipe Hands
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 mp_drawing = mp.solutions.drawing_utils
 
-# Load class labels
-class_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
-                'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'del', 'space']  # Adjust based on your dataset labels
-
-# Streamlit UI setup
 st.title("ASL Alphabet Translator")
 st.write("Show an ASL hand sign to the camera, and it will build a string!")
 
@@ -31,14 +27,13 @@ st.write("Show an ASL hand sign to the camera, and it will build a string!")
 video = st.empty()
 text_display = st.empty()
 
-# Initialize state variables
 predicted_string = ""
 last_prediction = None
 last_detected_time = None
 waiting_for_empty = False
 
 def extract_hand_landmarks(image):
-    """Extracts 21 hand landmarks from the given image."""
+    """Extracts 21 hand landmarks from a given image."""
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     results = hands.process(image_rgb)
 
@@ -49,9 +44,9 @@ def extract_hand_landmarks(image):
             data.append(landmark.x)
             data.append(landmark.y)
         
-        # Ensure the extracted data is exactly 42 values (21 landmarks × 2 coordinates)
+        # Ensure the extracted data is exactly 42 values (21 landmarks × 2 coordinates per landmark)
         if len(data) == 42:
-            return np.array(data).reshape(1, -1)  # Reshape for model input
+            return np.array(data).reshape(1, -1)
 
     return None
 
@@ -62,19 +57,13 @@ while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
-
     # Flip image for natural hand positioning
     frame = cv2.flip(frame, 1)
-
-    # Extract hand landmarks
     landmarks = extract_hand_landmarks(frame)
     current_time = time.time()
 
     if landmarks is not None:
-        # Convert NumPy array to DataFrame to match training format
         landmarks_df = pd.DataFrame(landmarks, columns=[f"x{i//2}" if i % 2 == 0 else f"y{i//2}" for i in range(42)])
-
-        # Make prediction
         prediction = mlp_model.predict(landmarks_df)[0]
 
         # Check if we should accept this letter
@@ -84,22 +73,21 @@ while cap.isOpened():
 
         elif last_prediction == prediction and (current_time - last_detected_time) >= 1.0 and not waiting_for_empty:
             if prediction == "del":
-                predicted_string = predicted_string[:-1]  # Remove last letter
+                predicted_string = predicted_string[:-1]  # Remove last letter for delete
             elif prediction == "space":
                 predicted_string += " "  # Add space
             else:
                 predicted_string += prediction  # Add letter
 
-            waiting_for_empty = True  # Now wait for an empty frame
-            last_detected_time = current_time  # Reset timer
+            waiting_for_empty = True  # wait for an empty frame
+            last_detected_time = current_time  # reset timer
 
         last_prediction = prediction
 
-        # Draw prediction text
         cv2.putText(frame, f'Prediction: {prediction}', (10, 50),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-    # **Update Streamlit UI dynamically**
+    # update Streamlit UI dynamically
     text_display.subheader(f"Predicted Text: {predicted_string}")
 
     # Convert frame to RGB for Streamlit
