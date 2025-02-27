@@ -205,6 +205,6 @@ while cap.isOpened():
     if key == 127:
         st.session_state.result_string = st.session_state.result_string[:-1]
 
-cap.release()
-cv2.destroyAllWindows()
-hands.close()
+# cap.release()
+# cv2.destroyAllWindows()
+# hands.close()
