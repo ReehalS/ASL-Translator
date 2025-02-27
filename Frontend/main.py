@@ -62,7 +62,9 @@ def extract_hand_landmarks(image):
         for landmark in landmarks.landmark:
             data.append(landmark.x)
             data.append(landmark.y)
-        return np.array(data).reshape(1, -1)  # Reshape for model input
+        # Ensure we have 42 values (21 landmarks x 2 coordinates)
+        if len(data) == 42:
+            return np.array(data).reshape(1, -1)  # Reshape for model input
     return None
 
 # --------------------
@@ -82,8 +84,10 @@ if 'last_prediction_time' not in st.session_state:
 st.title("ASL Hand Sign Recognition")
 st.write("Hold a sign to confirm the letter. Adjust the timings in the sidebar.")
 
+# Create placeholders for the image, recognized text, and ranked predictions
 image_placeholder = st.empty()
 text_placeholder = st.empty()
+ranked_placeholder = st.empty()
 
 cap = cv2.VideoCapture(0)
 
@@ -101,6 +105,18 @@ while True:
         cv2.putText(frame, "Time between characters", (10, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
     elif landmarks is not None:
+        # Display ranked predictions
+        # Get probability estimates
+        probs = mlp_model.predict_proba(landmarks)[0]
+        classes = mlp_model.classes_
+        ranked = list(zip(classes, probs))
+        ranked.sort(key=lambda x: x[1], reverse=True)
+        top5 = ranked[:5]
+        ranked_text = "### Top Predictions:\n"
+        for i, (cls, prob) in enumerate(top5, start=1):
+            ranked_text += f"Rank {i}: {cls} ({prob*100:.1f}%)\n"
+        ranked_placeholder.markdown(ranked_text)
+
         # Hand is detected and we're not in the waiting period.
         if st.session_state.hand_appeared_time is None:
             st.session_state.hand_appeared_time = current_time
@@ -109,7 +125,6 @@ while True:
         if current_time - st.session_state.hand_appeared_time >= hand_detection_delay:
             prediction = mlp_model.predict(landmarks)
             predicted_letter = prediction[0]
-            print(prediction)
             # If this is a new prediction, reset the letter timer.
             if st.session_state.current_letter != predicted_letter:
                 st.session_state.current_letter = predicted_letter
@@ -132,14 +147,16 @@ while True:
             cv2.putText(frame, f'Prediction: {predicted_letter}', (10, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
     else:
-        # If no hand is detected, reset all relevant timers and prediction values.
+        # No hand detected: reset timers and prediction
         st.session_state.current_letter = None
         st.session_state.letter_start_time = None
         st.session_state.hand_appeared_time = None
+        ranked_placeholder.markdown("### No hand detected.")
 
     image_placeholder.image(frame, channels="BGR")
     text_placeholder.markdown(f"### Resulting Text: {st.session_state.result_string}")
 
+    # Exit loop if 'q' is pressed (only works when running locally)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
