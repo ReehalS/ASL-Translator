@@ -5,14 +5,16 @@ import mediapipe as mp
 import numpy as np
 import time
 import warnings
-import pandas as pd  # Import pandas for feature name handling
 
-# Suppress warnings
 warnings.simplefilter(action="ignore", category=UserWarning)
 
-# Load the trained model
+# --------------------
+# Load model and set up MediaPipe
+# --------------------
 model_path = "Models/mlp_classifier_best_params.pkl"
 mlp_model = joblib.load(model_path)
+
+# Class labels as per your dataset
 class_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R',
                 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'del', 'space']
 
@@ -20,84 +22,96 @@ mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(static_image_mode=False, max_num_hands=1, min_detection_confidence=0.7)
 mp_drawing = mp.solutions.drawing_utils
 
-st.title("ASL Alphabet Translator")
-st.write("Show an ASL hand sign to the camera, and it will build a string!")
-
-# Webcam input and predicted text placeholders
-video = st.empty()
-text_display = st.empty()
-
-predicted_string = ""
-last_prediction = None
-last_detected_time = None
-waiting_for_empty = False
-
 def extract_hand_landmarks(image):
-    """Extracts 21 hand landmarks from a given image."""
+    """Extracts 21 hand landmarks from the given image."""
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     results = hands.process(image_rgb)
-
     if results.multi_hand_landmarks:
         landmarks = results.multi_hand_landmarks[0]
         data = []
         for landmark in landmarks.landmark:
             data.append(landmark.x)
             data.append(landmark.y)
-        
-        # Ensure the extracted data is exactly 42 values (21 landmarks × 2 coordinates per landmark)
-        if len(data) == 42:
-            return np.array(data).reshape(1, -1)
-
+        return np.array(data).reshape(1, -1)  # Reshape for model input
     return None
 
-# OpenCV video capture
+# --------------------
+# Streamlit session state initialization
+# --------------------
+if 'result_string' not in st.session_state:
+    st.session_state.result_string = ""
+if 'current_letter' not in st.session_state:
+    st.session_state.current_letter = None
+if 'letter_start_time' not in st.session_state:
+    st.session_state.letter_start_time = None
+if 'hand_appeared_time' not in st.session_state:
+    st.session_state.hand_appeared_time = None
+if 'last_prediction_time' not in st.session_state:
+    st.session_state.last_prediction_time = 0  # Time when last letter was confirmed
+
+st.title("ASL Hand Sign Recognition")
+st.write("Hold a sign for 1 second to confirm the letter. A 2 second delay is enforced between letters.")
+image_placeholder = st.empty()
+text_placeholder = st.empty()
+
 cap = cv2.VideoCapture(0)
 
-while cap.isOpened():
+while True:
     ret, frame = cap.read()
     if not ret:
         break
-    # Flip image for natural hand positioning
+
     frame = cv2.flip(frame, 1)
     landmarks = extract_hand_landmarks(frame)
     current_time = time.time()
 
-    if landmarks is not None:
-        landmarks_df = pd.DataFrame(landmarks, columns=[f"x{i//2}" if i % 2 == 0 else f"y{i//2}" for i in range(42)])
-        prediction = mlp_model.predict(landmarks_df)[0]
+    # Check if we're within the 2-second waiting period after a confirmed prediction.
+    if landmarks is not None and (current_time - st.session_state.last_prediction_time) < 2:
+        cv2.putText(frame, "Time between characters", (10, 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
+    elif landmarks is not None:
+        # Hand is detected and we're not in the waiting period.
+        if st.session_state.hand_appeared_time is None:
+            st.session_state.hand_appeared_time = current_time
 
-        # Check if we should accept this letter
-        if prediction != last_prediction:
-            last_detected_time = current_time
-            waiting_for_empty = False  # Reset waiting state
+        # Wait 0.75 seconds after a hand is detected before starting letter prediction.
+        if current_time - st.session_state.hand_appeared_time >= 0.75:
+            prediction = mlp_model.predict(landmarks)
+            predicted_letter = prediction[0]
 
-        elif last_prediction == prediction and (current_time - last_detected_time) >= 1.0 and not waiting_for_empty:
-            if prediction == "del":
-                predicted_string = predicted_string[:-1]  # Remove last letter for delete
-            elif prediction == "space":
-                predicted_string += " "  # Add space
+            # If this is a new prediction, reset the letter timer.
+            if st.session_state.current_letter != predicted_letter:
+                st.session_state.current_letter = predicted_letter
+                st.session_state.letter_start_time = current_time
             else:
-                predicted_string += prediction  # Add letter
+                # Check if the letter has been held for at least 0.75 seconds.
+                if current_time - st.session_state.letter_start_time >= 0.75:
+                    if predicted_letter == "space":
+                        st.session_state.result_string += " "
+                    elif predicted_letter == "del":
+                        st.session_state.result_string = st.session_state.result_string[:-1]
+                    else:
+                        st.session_state.result_string += predicted_letter
 
-            waiting_for_empty = True  # wait for an empty frame
-            last_detected_time = current_time  # reset timer
+                    st.session_state.last_prediction_time = current_time
+                    st.session_state.current_letter = None
+                    st.session_state.letter_start_time = None
+                    st.session_state.hand_appeared_time = None
 
-        last_prediction = prediction
+            cv2.putText(frame, f'Prediction: {predicted_letter}', (10, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    else:
+        # If no hand is detected, reset all relevant timers and prediction values.
+        st.session_state.current_letter = None
+        st.session_state.letter_start_time = None
+        st.session_state.hand_appeared_time = None
 
-        cv2.putText(frame, f'Prediction: {prediction}', (10, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
+    image_placeholder.image(frame, channels="BGR")
+    text_placeholder.markdown(f"### Resulting Text: {st.session_state.result_string}")
 
-    # update Streamlit UI dynamically
-    text_display.subheader(f"Predicted Text: {predicted_string}")
-
-    # Convert frame to RGB for Streamlit
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    video.image(frame_rgb, channels="RGB")
-
-    # Stop if user presses 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Release resources
 cap.release()
 cv2.destroyAllWindows()
+hands.close()
