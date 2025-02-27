@@ -28,7 +28,7 @@ inter_letter_delay = st.sidebar.number_input(
 # Dropdown for model selection from the Models folder
 models_dir = "Models"
 model_files = [f for f in os.listdir(models_dir) if f.endswith('.pkl')]
-default_model = "mlp_classifier_best_params.pkl"
+default_model = "multi_layer_perceptron_best.pkl"
 if default_model not in model_files:
     default_model = model_files[0] if model_files else None
 

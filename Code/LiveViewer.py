@@ -5,7 +5,7 @@ import numpy as np
 import time
 
 # Load the trained model
-model_path = "Models/mlp_classifier_best_params.pkl"
+model_path = "Models/multi_layer_perceptron_best.pkl"
 mlp_model = joblib.load(model_path)
 
 # Initialize MediaPipe Hands (allow up to 2 hands to check for one-hand condition)
