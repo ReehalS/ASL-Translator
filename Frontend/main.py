@@ -53,7 +53,10 @@ hands = mp_hands.Hands(
 mp_drawing = mp.solutions.drawing_utils
 
 def extract_hand_landmarks(image):
-    """Extracts 21 hand landmarks from the given image."""
+    """
+    Extracts 21 hand landmarks from the given image.
+    Returns a NumPy array (1x42) for model input if landmarks are detected, otherwise None.
+    """
     image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     results = hands.process(image_rgb)
     if results.multi_hand_landmarks:
@@ -64,7 +67,7 @@ def extract_hand_landmarks(image):
             data.append(landmark.y)
         # Ensure we have 42 values (21 landmarks x 2 coordinates)
         if len(data) == 42:
-            return np.array(data).reshape(1, -1)  # Reshape for model input
+            return np.array(data).reshape(1, -1)
     return None
 
 # --------------------
@@ -80,6 +83,8 @@ if 'hand_appeared_time' not in st.session_state:
     st.session_state.hand_appeared_time = None
 if 'last_prediction_time' not in st.session_state:
     st.session_state.last_prediction_time = 0  # Time when last letter was confirmed
+if 'prev_frame_time' not in st.session_state:
+    st.session_state.prev_frame_time = time.time()  # For framerate calculation
 
 st.title("ASL Hand Sign Recognition")
 st.write("Hold a sign to confirm the letter. Adjust the timings in the sidebar.")
@@ -96,17 +101,22 @@ while True:
     if not ret:
         break
 
+    # Compute frame interval for framerate display
+    current_time = time.time()
+    frame_interval = current_time - st.session_state.prev_frame_time
+    st.session_state.prev_frame_time = current_time
+    fps = 1.0 / frame_interval if frame_interval > 0 else 0
+
+    # Flip the frame horizontally (mirror view)
     frame = cv2.flip(frame, 1)
     landmarks = extract_hand_landmarks(frame)
-    current_time = time.time()
-
+    
     # Check if we're within the inter-letter waiting period.
     if landmarks is not None and (current_time - st.session_state.last_prediction_time) < inter_letter_delay:
         cv2.putText(frame, "Time between characters", (10, 100),
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2, cv2.LINE_AA)
     elif landmarks is not None:
-        # Display ranked predictions
-        # Get probability estimates
+        # Get probability estimates from the model
         probs = mlp_model.predict_proba(landmarks)[0]
         classes = mlp_model.classes_
         ranked = list(zip(classes, probs))
@@ -121,7 +131,6 @@ while True:
         if st.session_state.hand_appeared_time is None:
             st.session_state.hand_appeared_time = current_time
 
-        # Wait for the specified hand detection delay before starting letter prediction.
         if current_time - st.session_state.hand_appeared_time >= hand_detection_delay:
             prediction = mlp_model.predict(landmarks)
             predicted_letter = prediction[0]
@@ -130,7 +139,6 @@ while True:
                 st.session_state.current_letter = predicted_letter
                 st.session_state.letter_start_time = current_time
             else:
-                # Check if the letter has been held for at least the specified letter hold time.
                 if current_time - st.session_state.letter_start_time >= letter_hold_time:
                     if predicted_letter == "space":
                         st.session_state.result_string += " "
@@ -153,10 +161,14 @@ while True:
         st.session_state.hand_appeared_time = None
         ranked_placeholder.markdown("### No hand detected.")
 
+    # Overlay the framerate on the frame
+    cv2.putText(frame, f'FPS: {fps:.1f}', (10, 220),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
+
     image_placeholder.image(frame, channels="BGR")
     text_placeholder.markdown(f"### Resulting Text: {st.session_state.result_string}")
 
-    # Exit loop if 'q' is pressed (only works when running locally)
+    # Exit loop if 'q' is pressed (works when running locally)
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
