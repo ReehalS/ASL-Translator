@@ -48,9 +48,9 @@ namex==0.0.7
 nest-asyncio==1.6.0
 numexpr==2.10.1
 numpy==1.26.4
-opencv-contrib-python
-opencv-python
-opencv-python-headless
+opencv-contrib-python==4.11.0.86
+opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 opt-einsum==3.3.0
 optree==0.12.1
 packaging==24.2
