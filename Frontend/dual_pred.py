@@ -1,4 +1,6 @@
 import os
+os.environ["GLOG_minloglevel"] = "3"  # Suppress MediaPipe warnings
+
 import time
 import warnings
 import threading
