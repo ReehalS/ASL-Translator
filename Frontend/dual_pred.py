@@ -143,10 +143,10 @@ def callback(frame):
                         letter_container["current_letter_candidate"] = predicted_letter
                         letter_container["letter_hold_start_time"] = current_time
                     else:
-                        # If held long enough (>=min_hold_time) and sufficient gap (>=inter_letter_gap)
+                        # New logic: after the inter-letter gap has passed, wait another min_hold_time before adding the letter.
                         if (letter_container["letter_hold_start_time"] is not None and
-                            current_time - letter_container["letter_hold_start_time"] >= min_hold_time and
-                            current_time - letter_container["last_letter_added_time"] >= inter_letter_gap):
+                            current_time - letter_container["last_letter_added_time"] >= inter_letter_gap and
+                            current_time - letter_container["letter_hold_start_time"] >= min_hold_time):
                             
                             if predicted_letter.lower() == "space":
                                 letter_container["letter_string"] += " "
@@ -157,8 +157,9 @@ def callback(frame):
                                 letter_container["letter_string"] += predicted_letter
                             
                             letter_container["last_letter_added_time"] = current_time
+                            # Reset the hold timer after letter addition.
+                            letter_container["letter_hold_start_time"] = current_time
                 else:
-                    # No valid prediction.
                     letter_container["current_letter_candidate"] = None
                     letter_container["letter_hold_start_time"] = None
         else:
