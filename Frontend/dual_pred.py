@@ -103,7 +103,7 @@ letter_start_time = None
 
 def callback(frame):
     global global_prev_frame_time, current_letter, letter_start_time
-    
+    print("hello")
     # Convert frame to a numpy array
     img = frame.to_ndarray(format="bgr24")
     current_time = time.time()
@@ -136,7 +136,7 @@ def callback(frame):
             ranking = sorted(list(zip(classes, probs)), key=lambda x: x[1], reverse=True)
             top4 = ranking[:4]
             predicted_label = top4[0][0]
-
+            print(predicted_label)
             # Draw prediction results
             cv2.putText(img, f'Prediction: {predicted_label}', (10, 50),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
@@ -175,13 +175,12 @@ def callback(frame):
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
     cv2.putText(img, f'Text: {st.session_state.result_string}', (10, height - 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
-
     return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 # Start the WebRTC stream with the callback
-webrtc_streamer(key="asl_app", video_frame_callback=callback)
-# webrtc_streamer(
-#     key="asl_app",
-#     video_frame_callback=callback,
-#     rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-# )
+# webrtc_streamer(key="asl_app", video_frame_callback=callback)
+webrtc_streamer(
+    key="asl_app",
+    video_frame_callback=callback,
+    rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
