@@ -6,3 +6,4 @@ opencv-contrib-python
 opencv-python
 joblib
 numpy
+scikit-learn
