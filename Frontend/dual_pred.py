@@ -37,8 +37,8 @@ mlp_model = joblib.load(model_path)
 # New: Prediction mode selection.
 prediction_mode = st.sidebar.selectbox("Prediction Mode", ["Aggregate (Dual)", "Flipped Only"], index=0)
 
-# Note: To improve video quality, try increasing resolution:
-# media_stream_constraints={"video": {"width": 1280, "height": 720}, "audio": False}
+# Note: To improve video quality, try increasing resolution.
+# For example: {"video": {"width": 1280, "height": 720}, "audio": False}
 
 # Initialize MediaPipe Hands.
 mp_hands = mp.solutions.hands
@@ -57,7 +57,8 @@ letter_container = {
     "hand_first_detected_time": None, # Time when a hand is first detected.
     "letter_hold_start_time": None,   # Time when the candidate letter began to be held.
     "current_letter_candidate": None, # The current letter being held.
-    "last_letter_added_time": 0       # Time when a letter was last appended.
+    "last_letter_added_time": 0,      # Time when a letter was last appended.
+    "prev_time": time.time()          # For FPS calculation.
 }
 
 def get_landmarks(img):
@@ -93,7 +94,7 @@ def callback(frame):
     # For drawing, we use the flipped image.
     img = flipped_img.copy()
     
-    # Draw landmarks (from the flipped result if available; otherwise use original)
+    # Draw landmarks (prefer the flipped result; if not, use original)
     if results_flipped and results_flipped.multi_hand_landmarks:
         for hand_landmarks in results_flipped.multi_hand_landmarks:
             mp_drawing.draw_landmarks(img, hand_landmarks, mp_hands.HAND_CONNECTIONS)
@@ -167,18 +168,22 @@ def callback(frame):
             letter_container["current_letter_candidate"] = None
             letter_container["predicted_letter"] = "None"
     
-    # Overlay the prediction and the built string on the video feed.
+    # FPS calculation.
     with lock:
-        display_letter = letter_container["predicted_letter"]
-        display_string = letter_container["letter_string"]
-        last_added = letter_container["last_letter_added_time"]
-    cv2.putText(img, f'Prediction: {display_letter}', (10, 50),
+        dt = current_time - letter_container.get("prev_time", current_time)
+        fps = 1.0 / dt if dt > 0 else 0.0
+        letter_container["prev_time"] = current_time
+
+    # Overlay the prediction, built string, and FPS on the video feed.
+    cv2.putText(img, f'Prediction: {letter_container["predicted_letter"]}', (10, 50),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.putText(img, f'String: {display_string}', (10, 100),
+    cv2.putText(img, f'String: {letter_container["letter_string"]}', (10, 100),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+    cv2.putText(img, f'FPS: {fps:.2f}', (10, 200),
+                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
     
-    # Instead of just "Waiting...", show the time left before the next letter can be added.
-    time_since_last = current_time - last_added
+    # Show time left before the next letter can be added.
+    time_since_last = current_time - letter_container["last_letter_added_time"]
     if time_since_last < inter_letter_gap:
         time_left = inter_letter_gap - time_since_last
         cv2.putText(img, f"Time left: {time_left:.2f}s", (10, 150),
@@ -188,12 +193,11 @@ def callback(frame):
     return av.VideoFrame.from_ndarray(img, format="bgr24")
 
 # Start the WebRTC stream using the callback.
-# Configure to only transmit video (audio disabled) and you can specify higher resolution if desired.
 ctx = webrtc_streamer(
     key="asl_letter_prediction",
     video_frame_callback=callback,
     rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-    media_stream_constraints={"video": {"width": 1280, "height": 720}, "audio": False}
+    media_stream_constraints={"audio": False}
 )
 
 # Display the current predicted letter and the built string on the main interface.
