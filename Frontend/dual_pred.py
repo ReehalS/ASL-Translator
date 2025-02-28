@@ -179,7 +179,9 @@ def callback(frame):
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
     cv2.putText(img, f'String: {letter_container["letter_string"]}', (10, 100),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
-    cv2.putText(img, f'FPS: {fps:.2f}', (10, 200),
+    # Position the FPS text at the top right.
+    img_width = img.shape[1]
+    cv2.putText(img, f'FPS: {fps:.2f}', (img_width - 150, 50),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
     
     # Show time left before the next letter can be added.
