@@ -1,6 +1,4 @@
 import os
-os.environ["GLOG_minloglevel"] = "3"  # Suppress MediaPipe warnings
-
 import time
 import warnings
 import threading
@@ -199,7 +197,7 @@ ctx = webrtc_streamer(
     key="asl_letter_prediction",
     video_frame_callback=callback,
     rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-    media_stream_constraints={"audio": False}
+    media_stream_constraints={"video": {"width": 1280, "height": 720}, "audio": False}
 )
 
 # Display the current predicted letter and the built string on the main interface.
