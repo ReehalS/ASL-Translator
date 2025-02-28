@@ -15,8 +15,7 @@ from streamlit_webrtc import webrtc_streamer
 av.logging.set_level(av.logging.ERROR)
 warnings.filterwarnings("ignore", message="Using NORM_RECT without IMAGE_DIMENSIONS")
 
-st.title("ASL Hand Landmark & Letter Prediction Test")
-st.write("This demo shows live hand landmark detection and letter prediction using MediaPipe.")
+st.title("ASL Letter Predictor")
 
 # Sidebar settings pane.
 st.sidebar.header("Settings")
