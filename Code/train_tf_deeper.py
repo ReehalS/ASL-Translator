@@ -56,12 +56,34 @@ def build_deeper_model(input_shape, num_classes, use_bilstm=False):
 
 
 def train(args):
-    X, y, clips = windows_to_numpy(args.csv, window_size=args.window, stride=args.stride)
+    X, y, clips = windows_to_numpy(args.csv, window_size=args.window, stride=args.stride, jitter=args.jitter, lm_noise=args.lm_noise)
     if X.size == 0:
         print('No windows found')
         return
     lm = label_map(y)
     y_idx = np.array([lm[v] for v in y], dtype=np.int32)
+
+    # optional oversample at window-level to balance classes
+    if args.oversample:
+        from collections import defaultdict
+        cls_to_idx = defaultdict(list)
+        for i, lab in enumerate(y):
+            cls_to_idx[lab].append(i)
+        maxc = max(len(v) for v in cls_to_idx.values())
+        X_parts = []
+        y_parts = []
+        for lab, idxs in cls_to_idx.items():
+            cur = X[idxs]
+            need = maxc - cur.shape[0]
+            X_parts.append(cur)
+            y_parts.extend([lab] * cur.shape[0])
+            if need > 0:
+                choices = np.random.choice(len(idxs), need, replace=True)
+                X_parts.append(cur[choices])
+                y_parts.extend([lab] * need)
+        X = np.concatenate(X_parts, axis=0)
+        y = np.array(y_parts)
+        y_idx = np.array([lm[v] for v in y], dtype=np.int32)
 
     # clip-wise split
     clip_to_idx = defaultdict(list)
@@ -103,9 +125,12 @@ if __name__ == '__main__':
     parser.add_argument('--csv', required=True)
     parser.add_argument('--window', type=int, default=16)
     parser.add_argument('--stride', type=int, default=4)
+    parser.add_argument('--jitter', type=int, default=0)
+    parser.add_argument('--lm_noise', type=float, default=0.0)
     parser.add_argument('--epochs', type=int, default=30)
     parser.add_argument('--batch', type=int, default=32)
     parser.add_argument('--out', type=str, default='gesture_wlasl_deeper')
     parser.add_argument('--bilstm', action='store_true')
+    parser.add_argument('--oversample', action='store_true', help='Oversample windows per class')
     args = parser.parse_args()
     train(args)

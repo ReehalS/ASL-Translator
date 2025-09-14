@@ -30,7 +30,7 @@ def attention_pooling(embeds):
     return pooled, w
 
 
-def prepare_bags(csv_path, window_size=16, stride=4):
+def prepare_bags(csv_path, window_size=16, stride=4, bag_size=None):
     # create dict clip_id -> list of window arrays
     bags = defaultdict(list)
     labels = {}
@@ -41,7 +41,18 @@ def prepare_bags(csv_path, window_size=16, stride=4):
     bag_list = []
     label_list = []
     for clip_id, wins in bags.items():
-        bag_list.append(np.stack(wins, axis=0))
+        arr = np.stack(wins, axis=0)
+        if bag_size is not None:
+            # if more windows than bag_size, sample without replacement
+            if arr.shape[0] >= bag_size:
+                idxs = np.random.choice(arr.shape[0], bag_size, replace=False)
+                arr = arr[idxs]
+            else:
+                # pad by repeating last window until bag_size
+                repeats = bag_size - arr.shape[0]
+                pad = np.repeat(arr[-1:], repeats, axis=0)
+                arr = np.concatenate([arr, pad], axis=0)
+        bag_list.append(arr)
         label_list.append(labels[clip_id])
     return bag_list, label_list
 
@@ -52,7 +63,7 @@ def label_map(labels):
 
 
 def train(args):
-    bag_list, label_list = prepare_bags(args.csv, window_size=args.window, stride=args.stride)
+    bag_list, label_list = prepare_bags(args.csv, window_size=args.window, stride=args.stride, bag_size=args.bag_size)
     if not bag_list:
         print('No bags found')
         return
@@ -69,8 +80,11 @@ def train(args):
     encoder = build_encoder((args.window, bag_list[0].shape[2]), embed_dim=args.embed)
     num_classes = len(lm)
 
-    # build model for a single bag by creating inputs of shape (None, window, feat)
-    bag_input = tf.keras.layers.Input(shape=(None, args.window, bag_list[0].shape[2]), dtype=tf.float32)
+    # build model for a single bag by creating inputs of shape (bag_size, window, feat) if bag_size provided
+    if args.bag_size:
+        bag_input = tf.keras.layers.Input(shape=(args.bag_size, args.window, bag_list[0].shape[2]), dtype=tf.float32)
+    else:
+        bag_input = tf.keras.layers.Input(shape=(None, args.window, bag_list[0].shape[2]), dtype=tf.float32)
     # time-distributed encoder
     td = tf.keras.layers.TimeDistributed(encoder)(bag_input)  # (batch, num_windows, embed_dim)
     # apply attention along num_windows axis
@@ -113,7 +127,9 @@ def train(args):
         print(f'Epoch {epoch+1}/{args.epochs} val_acc={val_acc:.3f}')
         if val_acc > best_val:
             best_val = val_acc
-            model.save(os.path.join('Models', args.out + '_mil.h5'))
+            os.makedirs('Models', exist_ok=True)
+            model.save(os.path.join('Models', args.out + '_mil.keras'))
+            model.save_weights(os.path.join('Models', args.out + '_mil.weights.h5'))
 
     # save label map
     with open(os.path.join('Models', args.out + '_mil_labels.json'), 'w') as f:
@@ -130,6 +146,8 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--batch', type=int, default=8)
     parser.add_argument('--embed', type=int, default=128)
+    parser.add_argument('--bag_size', type=int, default=None,
+                        help='If set, sample/pad each clip to this many windows')
     parser.add_argument('--out', type=str, default='gesture_wlasl_mil')
     args = parser.parse_args()
     train(args)

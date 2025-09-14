@@ -29,7 +29,8 @@ def clip_feature_matrix(df_clip: pd.DataFrame) -> Tuple[np.ndarray, List[int]]:
     return fm, frame_idxs
 
 
-def sliding_windows(features: np.ndarray, frame_idxs: List[int], window_size: int = 16, stride: int = 4, pad: bool = True) -> Iterator[Tuple[np.ndarray, int]]:
+def sliding_windows(features: np.ndarray, frame_idxs: List[int], window_size: int = 16, stride: int = 4, pad: bool = True,
+                    jitter: int = 0) -> Iterator[Tuple[np.ndarray, int]]:
     """Yield (window, start_frame_idx) windows from features.
 
     If pad=True, pad start with zeros so the first window is aligned at frame 0.
@@ -44,22 +45,32 @@ def sliding_windows(features: np.ndarray, frame_idxs: List[int], window_size: in
         frame_idxs = list(range(-pad_amt, 0)) + frame_idxs
 
     for start in range(0, T - window_size + 1, stride):
-        win = features[start:start + window_size]
-        yield win, frame_idxs[start] if start < len(frame_idxs) else 0
+        # temporal jitter: shift start by up to +/- jitter frames (clamped)
+        s = start
+        if jitter and jitter > 0:
+            shift = int(np.random.randint(-jitter, jitter + 1))
+            s = max(0, min(T - window_size, start + shift))
+        win = features[s:s + window_size]
+        yield win, frame_idxs[s] if s < len(frame_idxs) else 0
 
 
-def generate_windows_from_csv(path: str, window_size: int = 16, stride: int = 4, pad: bool = True) -> Iterator[Dict]:
+def generate_windows_from_csv(path: str, window_size: int = 16, stride: int = 4, pad: bool = True,
+                              jitter: int = 0, lm_noise: float = 0.0) -> Iterator[Dict]:
     """Iterate over all clips in CSV and yield dicts: {'clip_id','label','window','start_frame'}"""
     df = load_frame_csv(path)
     for clip_id, group in df.groupby('clip_id'):
         group_sorted = group.sort_values('frame_idx')
         label = group_sorted['label'].iloc[0]
         features, frame_idxs = clip_feature_matrix(group_sorted)
-        for win, start in sliding_windows(features, frame_idxs, window_size=window_size, stride=stride, pad=pad):
-            yield {'clip_id': clip_id, 'label': label, 'window': win, 'start_frame': start}
+        for win, start in sliding_windows(features, frame_idxs, window_size=window_size, stride=stride, pad=pad, jitter=jitter):
+            w = win.copy()
+            if lm_noise and lm_noise > 0.0:
+                w = w + np.random.normal(scale=lm_noise, size=w.shape).astype(w.dtype)
+            yield {'clip_id': clip_id, 'label': label, 'window': w, 'start_frame': start}
 
 
-def windows_to_numpy(path: str, window_size: int = 16, stride: int = 4, pad: bool = True) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+def windows_to_numpy(path: str, window_size: int = 16, stride: int = 4, pad: bool = True,
+                     jitter: int = 0, lm_noise: float = 0.0) -> Tuple[np.ndarray, np.ndarray, List[str]]:
     """Convert all windows to (N, L, D) numpy array and labels array.
 
     Returns X (N, L, D), y (N,), clip_ids list parallel to rows (N,)
@@ -67,7 +78,7 @@ def windows_to_numpy(path: str, window_size: int = 16, stride: int = 4, pad: boo
     Xs = []
     ys = []
     clips = []
-    for item in generate_windows_from_csv(path, window_size=window_size, stride=stride, pad=pad):
+    for item in generate_windows_from_csv(path, window_size=window_size, stride=stride, pad=pad, jitter=jitter, lm_noise=lm_noise):
         Xs.append(item['window'])
         ys.append(item['label'])
         clips.append(item['clip_id'])
